@@ -1,4 +1,4 @@
-# Besov Glitch Field
+# Besov Field
 
 A pixelated visualisation of a rough two-dimensional drift field and its mollified shadow.
 
