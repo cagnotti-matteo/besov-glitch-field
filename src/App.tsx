@@ -23,7 +23,7 @@ const FIELD_W = 150;
 const FIELD_H = 100;
 
 /*
-  Visual palette
+  Visual palette.
 
   Field: cold pale blue, opacity varies with magnitude.
   Tracers: warm orange-red, larger for contrast.
@@ -55,23 +55,22 @@ function randn(random: () => number) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-function makeParticles(n: number, random: () => number): Particle[] {
-  return Array.from({ length: n }, () => {
-    const x = random();
-    const y = random();
+function makeParticle(random: () => number): Particle {
+  const margin = 0.08;
+  const x = margin + (1 - 2 * margin) * random();
+  const y = margin + (1 - 2 * margin) * random();
 
-    return {
-      x,
-      y,
-      px: x,
-      py: y,
-      life: 0.7 + 0.6 * random(),
-    };
-  });
+  return {
+    x,
+    y,
+    px: x,
+    py: y,
+    life: 0.7 + 0.6 * random(),
+  };
 }
 
-function wrap01(x: number) {
-  return x - Math.floor(x);
+function makeParticles(n: number, random: () => number): Particle[] {
+  return Array.from({ length: n }, () => makeParticle(random));
 }
 
 function clamp(x: number, a: number, b: number) {
@@ -88,9 +87,9 @@ function sampleScalarNoise(
   /*
     Fast visual model for a rough scalar field.
 
-    alpha large         -> low frequencies dominate, coherent regions.
-    alpha small/negative -> high frequencies persist, glitchier regions.
-    epsilon large       -> stronger mollification, clearer shadow.
+    alpha large           -> low frequencies dominate, coherent regions.
+    alpha small/negative  -> high frequencies persist, glitchier regions.
+    epsilon large         -> stronger mollification, clearer shadow.
 
     This is not an exact Besov sampler. It is a cheap multiscale
     Fourier-like random field with the intended visual monotonicity.
@@ -237,10 +236,18 @@ export default function App() {
           const x = (ix + 0.5) / FIELD_W;
           const y = (iy + 0.5) / FIELD_H;
 
-          const [, , mag] = vectorField(x, y, seed, params.alpha, params.epsilon);
+          const [, , mag] = vectorField(
+            x,
+            y,
+            seed,
+            params.alpha,
+            params.epsilon,
+          );
 
           const intensity = clamp(Math.pow(mag, 0.6), 0, 1);
-          const alphaByte = Math.floor(255 * clamp(0.06 + 0.82 * intensity, 0, 1));
+          const alphaByte = Math.floor(
+            255 * clamp(0.06 + 0.82 * intensity, 0, 1),
+          );
 
           const offset = 4 * (iy * FIELD_W + ix);
           data[offset] = FIELD_R;
@@ -295,70 +302,69 @@ export default function App() {
       }
     };
 
-const stepParticles = () => {
-  const dt = 0.006 * params.speed;
-  const noise = 0.055 * Math.sqrt(dt);
-  const random = Math.random;
+    const stepParticles = () => {
+      const dt = 0.006 * params.speed;
+      const noise = 0.055 * Math.sqrt(dt);
+      const random = Math.random;
 
-  for (const p of particlesRef.current) {
-    p.px = p.x;
-    p.py = p.y;
+      for (const p of particlesRef.current) {
+        p.px = p.x;
+        p.py = p.y;
 
-    const [bx, by] = vectorField(
-      p.x,
-      p.y,
-      seed,
-      params.alpha,
-      params.epsilon,
-    );
+        const [bx, by] = vectorField(
+          p.x,
+          p.y,
+          seed,
+          params.alpha,
+          params.epsilon,
+        );
 
-    const nextX = p.x + 0.55 * bx * dt + noise * randn(random);
-    const nextY = p.y + 0.55 * by * dt + noise * randn(random);
+        const nextX = p.x + 0.55 * bx * dt + noise * randn(random);
+        const nextY = p.y + 0.55 * by * dt + noise * randn(random);
 
-    p.x = wrap01(nextX);
-    p.y = wrap01(nextY);
+        /*
+          Absorbing boundary for the visualisation:
+          when a tracer leaves the square, delete it and respawn it in the
+          interior. This avoids artificial-looking accumulation at the edges.
+        */
+        if (nextX <= 0 || nextX >= 1 || nextY <= 0 || nextY >= 1) {
+          const fresh = makeParticle(random);
+          p.x = fresh.x;
+          p.y = fresh.y;
+          p.px = fresh.px;
+          p.py = fresh.py;
+          p.life = fresh.life;
+          continue;
+        }
 
-    p.life -= dt * 0.035;
+        p.x = nextX;
+        p.y = nextY;
 
-    if (p.life <= 0) {
-      p.x = random();
-      p.y = random();
-      p.px = p.x;
-      p.py = p.y;
-      p.life = 0.7 + 0.6 * random();
-    }
-  }
-};
+        p.life -= dt * 0.035;
 
-   const drawParticles = () => {
-  const rect = canvas.getBoundingClientRect();
-  const width = Math.floor(rect.width);
-  const height = Math.floor(rect.height);
-  const size = 5;
-  const half = Math.floor(size / 2);
-
-  context.fillStyle = `rgba(${DOT_R},${DOT_G},${DOT_B},0.92)`;
-
-  const drawWrappedDot = (cx: number, cy: number) => {
-    const xs = [cx, cx - width, cx + width];
-    const ys = [cy, cy - height, cy + height];
-
-    for (const x of xs) {
-      for (const y of ys) {
-        if (x + half < 0 || x - half >= width) continue;
-        if (y + half < 0 || y - half >= height) continue;
-
-        context.fillRect(x - half, y - half, size, size);
+        if (p.life <= 0) {
+          const fresh = makeParticle(random);
+          p.x = fresh.x;
+          p.y = fresh.y;
+          p.px = fresh.px;
+          p.py = fresh.py;
+          p.life = fresh.life;
+        }
       }
-    }
-  };
+    };
 
-  for (const p of particlesRef.current) {
-    const px = Math.floor(p.x * width);
-    const py = Math.floor(p.y * height);
-    drawWrappedDot(px, py);
-  }
-};
+    const drawParticles = () => {
+      const rect = canvas.getBoundingClientRect();
+
+      context.fillStyle = `rgba(${DOT_R},${DOT_G},${DOT_B},0.92)`;
+
+      for (const p of particlesRef.current) {
+        const px = Math.floor(p.x * rect.width);
+        const py = Math.floor(p.y * rect.height);
+
+        context.fillRect(px - 2, py - 2, 5, 5);
+      }
+    };
 
     const drawOverlayText = () => {
       const rect = canvas.getBoundingClientRect();
