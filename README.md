@@ -1,73 +1,66 @@
-# React + TypeScript + Vite
+# Besov Glitch Field
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A pixelated visualisation of a rough two-dimensional drift field and its mollified shadow.
 
-Currently, two official plugins are available:
+The deployed page is available at:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+[https://cagnotti-matteo.github.io/besov-glitch-field/](https://cagnotti-matteo.github.io/besov-glitch-field/)
 
-## React Compiler
+## Idea
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+This sketch is inspired by distributional stochastic differential equations of the form
 
-## Expanding the ESLint configuration
+\[
+dX_t = b(X_t)\,dt + dB_t,
+\]
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+where the drift \(b\) may have negative regularity. In such a regime, the drift is not necessarily a classical vector field that can be drawn pointwise.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Instead, the visualisation shows a mollified version
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+\[
+b^\varepsilon = P_\varepsilon b,
+\]
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+interpreted as a visible approximation of the underlying rough object.
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The field is generated as a cheap multiscale random Fourier-like field. It is not intended as an exact Besov sampler; the goal is visual monotonicity: smoother, more coherent fields for larger regularity, and more pixelated high-frequency structure for lower regularity.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Controls
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- **\(\alpha\)** — roughness/regularity parameter.
+  - Larger \(\alpha\): smoother, more coherent regions.
+  - Negative \(\alpha\): glitchier, high-frequency, distributional-looking structure.
+
+- **\(\varepsilon\)** — mollification scale.
+  - Larger \(\varepsilon\): stronger smoothing, clearer visible shadow.
+  - Smaller \(\varepsilon\): less smoothing, rougher field.
+
+- **\(N\)** — number of tracer particles.
+
+- **\(v\)** — animation speed.
+
+- **field** — toggles the pixelated drift landscape.
+
+- **tracers** — toggles moving particles advected by the visible drift.
+
+- **arrows** — toggles sparse vector arrows showing drift direction.
+
+## Visual language
+
+The current version uses a monochrome field:
+
+- field opacity encodes the magnitude of the mollified drift;
+- orange dots are particles moving through the field;
+- optional arrows show the direction of the vector field.
+
+## Implementation
+
+The project is built with:
+
+- [Vite](https://vite.dev/)
+- React
+- TypeScript
+- HTML canvas
+
+The pixel field is cached and redrawn only when the parameters or seed change, so the animation can remain responsive while the tracer particles move every frame.
