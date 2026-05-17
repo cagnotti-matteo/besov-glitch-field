@@ -22,6 +22,20 @@ type Particle = {
 const FIELD_W = 150;
 const FIELD_H = 100;
 
+/*
+  Visual palette
+
+  Field: cold pale blue, opacity varies with magnitude.
+  Tracers: warm orange-red, larger for contrast.
+*/
+const FIELD_R = 205;
+const FIELD_G = 224;
+const FIELD_B = 255;
+
+const DOT_R = 255;
+const DOT_G = 102;
+const DOT_B = 72;
+
 function mulberry32(seed: number) {
   return function random() {
     let t = (seed += 0x6d2b79f5);
@@ -64,57 +78,6 @@ function clamp(x: number, a: number, b: number) {
   return Math.max(a, Math.min(b, x));
 }
 
-function hsvToRgb(h: number, s: number, v: number) {
-  const i = Math.floor(h * 6);
-  const f = h * 6 - i;
-  const p = v * (1 - s);
-  const q = v * (1 - f * s);
-  const t = v * (1 - (1 - f) * s);
-
-  let r = 0;
-  let g = 0;
-  let b = 0;
-
-  switch (i % 6) {
-    case 0:
-      r = v;
-      g = t;
-      b = p;
-      break;
-    case 1:
-      r = q;
-      g = v;
-      b = p;
-      break;
-    case 2:
-      r = p;
-      g = v;
-      b = t;
-      break;
-    case 3:
-      r = p;
-      g = q;
-      b = v;
-      break;
-    case 4:
-      r = t;
-      g = p;
-      b = v;
-      break;
-    case 5:
-      r = v;
-      g = p;
-      b = q;
-      break;
-  }
-
-  return [
-    Math.floor(255 * r),
-    Math.floor(255 * g),
-    Math.floor(255 * b),
-  ] as const;
-}
-
 function sampleScalarNoise(
   x: number,
   y: number,
@@ -125,12 +88,12 @@ function sampleScalarNoise(
   /*
     Fast visual model for a rough scalar field.
 
-    alpha large       -> low frequencies dominate, coherent colors.
-    alpha small/negative -> high frequencies persist, glitchy colors.
-    epsilon large     -> mollified shadow, suppresses high frequencies.
+    alpha large         -> low frequencies dominate, coherent regions.
+    alpha small/negative -> high frequencies persist, glitchier regions.
+    epsilon large       -> stronger mollification, clearer shadow.
 
-    This is not an exact Besov sampler. It is a browser-cheap multiscale
-    random Fourier field with the intended visual monotonicity.
+    This is not an exact Besov sampler. It is a cheap multiscale
+    Fourier-like random field with the intended visual monotonicity.
   */
   let value = 0;
   let norm = 0;
@@ -181,9 +144,8 @@ function vectorField(
 
         b = (d_y psi, -d_x psi).
 
-    We finite-difference the mollified rough field. This makes the displayed
-    object a visible shadow of a rough drift rather than a classical smooth
-    vector field drawn directly.
+    We finite-difference the mollified rough field, so the rendered object
+    is a visible shadow of a rough drift.
   */
   const h = 1 / 260;
 
@@ -275,25 +237,16 @@ export default function App() {
           const x = (ix + 0.5) / FIELD_W;
           const y = (iy + 0.5) / FIELD_H;
 
-          const [bx, by, mag] = vectorField(
-            x,
-            y,
-            seed,
-            params.alpha,
-            params.epsilon,
-          );
+          const [, , mag] = vectorField(x, y, seed, params.alpha, params.epsilon);
 
-          const hue = wrap01(Math.atan2(by, bx) / (2 * Math.PI) + 0.5);
-          const value = clamp(0.12 + 0.92 * Math.pow(mag, 0.55), 0, 1);
-          const saturation = clamp(0.42 + 0.55 * Math.pow(mag, 0.35), 0, 1);
+          const intensity = clamp(Math.pow(mag, 0.6), 0, 1);
+          const alphaByte = Math.floor(255 * clamp(0.06 + 0.82 * intensity, 0, 1));
 
-          const [r, g, b] = hsvToRgb(hue, saturation, value);
           const offset = 4 * (iy * FIELD_W + ix);
-
-          data[offset] = r;
-          data[offset + 1] = g;
-          data[offset + 2] = b;
-          data[offset + 3] = 255;
+          data[offset] = FIELD_R;
+          data[offset + 1] = FIELD_G;
+          data[offset + 2] = FIELD_B;
+          data[offset + 3] = alphaByte;
         }
       }
 
@@ -314,7 +267,7 @@ export default function App() {
       const cols = 24;
       const rows = 15;
 
-      context.strokeStyle = "rgba(245,245,245,0.65)";
+      context.strokeStyle = `rgba(${DOT_R},${DOT_G},${DOT_B},0.72)`;
       context.lineWidth = 1;
 
       for (let iy = 0; iy < rows; iy++) {
@@ -377,13 +330,13 @@ export default function App() {
     const drawParticles = () => {
       const rect = canvas.getBoundingClientRect();
 
-      context.fillStyle = "rgba(245,245,235,0.76)";
+      context.fillStyle = `rgba(${DOT_R},${DOT_G},${DOT_B},0.92)`;
 
       for (const p of particlesRef.current) {
         const px = Math.round(p.x * rect.width);
         const py = Math.round(p.y * rect.height);
 
-        context.fillRect(px, py, 2, 2);
+        context.fillRect(px - 2, py - 2, 5, 5);
       }
     };
 
@@ -591,16 +544,20 @@ export default function App() {
             <p className="legendTitle">how to read it</p>
             <dl>
               <div>
-                <dt>hue</dt>
+                <dt>field opacity</dt>
+                <dd>magnitude of the mollified drift</dd>
+              </div>
+              <div>
+                <dt>arrows</dt>
                 <dd>direction of the drift vector</dd>
               </div>
               <div>
-                <dt>brightness</dt>
-                <dd>magnitude of the mollified field</dd>
+                <dt>orange dots</dt>
+                <dd>tracers moving in the visible shadow</dd>
               </div>
               <div>
                 <dt>α large</dt>
-                <dd>coherent colors, smoother drift</dd>
+                <dd>coherent regions, smoother drift</dd>
               </div>
               <div>
                 <dt>α negative</dt>
