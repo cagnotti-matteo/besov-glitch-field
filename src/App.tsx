@@ -295,50 +295,70 @@ export default function App() {
       }
     };
 
-    const stepParticles = () => {
-      const dt = 0.006 * params.speed;
-      const noise = 0.055 * Math.sqrt(dt);
-      const random = Math.random;
+const stepParticles = () => {
+  const dt = 0.006 * params.speed;
+  const noise = 0.055 * Math.sqrt(dt);
+  const random = Math.random;
 
-      for (const p of particlesRef.current) {
-        p.px = p.x;
-        p.py = p.y;
+  for (const p of particlesRef.current) {
+    p.px = p.x;
+    p.py = p.y;
 
-        const [bx, by] = vectorField(
-          p.x,
-          p.y,
-          seed,
-          params.alpha,
-          params.epsilon,
-        );
+    const [bx, by] = vectorField(
+      p.x,
+      p.y,
+      seed,
+      params.alpha,
+      params.epsilon,
+    );
 
-        p.x = wrap01(p.x + 0.55 * bx * dt + noise * randn(random));
-        p.y = wrap01(p.y + 0.55 * by * dt + noise * randn(random));
+    const nextX = p.x + 0.55 * bx * dt + noise * randn(random);
+    const nextY = p.y + 0.55 * by * dt + noise * randn(random);
 
-        p.life -= dt * 0.035;
+    p.x = wrap01(nextX);
+    p.y = wrap01(nextY);
 
-        if (p.life <= 0) {
-          p.x = random();
-          p.y = random();
-          p.px = p.x;
-          p.py = p.y;
-          p.life = 0.7 + 0.6 * random();
-        }
+    p.life -= dt * 0.035;
+
+    if (p.life <= 0) {
+      p.x = random();
+      p.y = random();
+      p.px = p.x;
+      p.py = p.y;
+      p.life = 0.7 + 0.6 * random();
+    }
+  }
+};
+
+   const drawParticles = () => {
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.floor(rect.width);
+  const height = Math.floor(rect.height);
+  const size = 5;
+  const half = Math.floor(size / 2);
+
+  context.fillStyle = `rgba(${DOT_R},${DOT_G},${DOT_B},0.92)`;
+
+  const drawWrappedDot = (cx: number, cy: number) => {
+    const xs = [cx, cx - width, cx + width];
+    const ys = [cy, cy - height, cy + height];
+
+    for (const x of xs) {
+      for (const y of ys) {
+        if (x + half < 0 || x - half >= width) continue;
+        if (y + half < 0 || y - half >= height) continue;
+
+        context.fillRect(x - half, y - half, size, size);
       }
-    };
+    }
+  };
 
-    const drawParticles = () => {
-      const rect = canvas.getBoundingClientRect();
-
-      context.fillStyle = `rgba(${DOT_R},${DOT_G},${DOT_B},0.92)`;
-
-      for (const p of particlesRef.current) {
-        const px = Math.round(p.x * rect.width);
-        const py = Math.round(p.y * rect.height);
-
-        context.fillRect(px - 2, py - 2, 5, 5);
-      }
-    };
+  for (const p of particlesRef.current) {
+    const px = Math.floor(p.x * width);
+    const py = Math.floor(p.y * height);
+    drawWrappedDot(px, py);
+  }
+};
 
     const drawOverlayText = () => {
       const rect = canvas.getBoundingClientRect();
