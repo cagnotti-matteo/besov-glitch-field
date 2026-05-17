@@ -439,7 +439,7 @@ export default function App() {
       <section className="hero">
         <div className="copy">
           <p className="eyebrow">rough drift / mollification / visible shadow</p>
-          <h1>Besov Glitch Field</h1>
+          <h1>Distributional Besov Field</h1>
           <p className="subtitle">
             A distributional drift cannot be drawn directly. This sketch shows
             its mollified shadow: α controls roughness, ε controls the scale at
@@ -587,7 +587,7 @@ export default function App() {
               </div>
               <div>
                 <dt>α negative</dt>
-                <dd>high-frequency, distributional glitch</dd>
+                <dd>high-frequency, distributional</dd>
               </div>
               <div>
                 <dt>ε large</dt>
