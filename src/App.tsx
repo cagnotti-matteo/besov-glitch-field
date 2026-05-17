@@ -1,122 +1,619 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useEffect, useRef, useState } from "react";
+import "./index.css";
 
-function App() {
-  const [count, setCount] = useState(0)
+type Params = {
+  alpha: number;
+  epsilon: number;
+  particleCount: number;
+  speed: number;
+  showParticles: boolean;
+  showArrows: boolean;
+  showField: boolean;
+};
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+type Particle = {
+  x: number;
+  y: number;
+  px: number;
+  py: number;
+  life: number;
+};
 
-      <div className="ticks"></div>
+const FIELD_W = 150;
+const FIELD_H = 100;
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+function mulberry32(seed: number) {
+  return function random() {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-export default App
+function randn(random: () => number) {
+  let u = 0;
+  let v = 0;
+
+  while (u === 0) u = random();
+  while (v === 0) v = random();
+
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function makeParticles(n: number, random: () => number): Particle[] {
+  return Array.from({ length: n }, () => {
+    const x = random();
+    const y = random();
+
+    return {
+      x,
+      y,
+      px: x,
+      py: y,
+      life: 0.7 + 0.6 * random(),
+    };
+  });
+}
+
+function wrap01(x: number) {
+  return x - Math.floor(x);
+}
+
+function clamp(x: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, x));
+}
+
+function hsvToRgb(h: number, s: number, v: number) {
+  const i = Math.floor(h * 6);
+  const f = h * 6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  switch (i % 6) {
+    case 0:
+      r = v;
+      g = t;
+      b = p;
+      break;
+    case 1:
+      r = q;
+      g = v;
+      b = p;
+      break;
+    case 2:
+      r = p;
+      g = v;
+      b = t;
+      break;
+    case 3:
+      r = p;
+      g = q;
+      b = v;
+      break;
+    case 4:
+      r = t;
+      g = p;
+      b = v;
+      break;
+    case 5:
+      r = v;
+      g = p;
+      b = q;
+      break;
+  }
+
+  return [
+    Math.floor(255 * r),
+    Math.floor(255 * g),
+    Math.floor(255 * b),
+  ] as const;
+}
+
+function sampleScalarNoise(
+  x: number,
+  y: number,
+  seed: number,
+  alpha: number,
+  epsilon: number,
+) {
+  /*
+    Fast visual model for a rough scalar field.
+
+    alpha large       -> low frequencies dominate, coherent colors.
+    alpha small/negative -> high frequencies persist, glitchy colors.
+    epsilon large     -> mollified shadow, suppresses high frequencies.
+
+    This is not an exact Besov sampler. It is a browser-cheap multiscale
+    random Fourier field with the intended visual monotonicity.
+  */
+  let value = 0;
+  let norm = 0;
+
+  const randomBase = Math.abs(seed) + 17;
+  const octaves = 9;
+
+  for (let j = 0; j < octaves; j++) {
+    const freq = 2 ** j;
+
+    const roughWeight = freq ** (-(alpha + 0.55));
+    const smoothingWeight = Math.exp(-epsilon * epsilon * freq * freq * 18);
+    const weight = roughWeight * smoothingWeight;
+
+    const a1 = Math.sin((randomBase + 13.1 * j) * 12.9898) * 43758.5453;
+    const a2 = Math.sin((randomBase + 71.7 * j) * 78.233) * 24634.6345;
+
+    const phase1 = 2 * Math.PI * (a1 - Math.floor(a1));
+    const phase2 = 2 * Math.PI * (a2 - Math.floor(a2));
+
+    const angle = 2 * Math.PI * ((j * 0.61803398875 + seed * 0.013) % 1);
+    const kx = Math.cos(angle) * freq;
+    const ky = Math.sin(angle) * freq;
+
+    value +=
+      weight *
+      (Math.sin(2 * Math.PI * (kx * x + ky * y) + phase1) +
+        0.65 *
+          Math.cos(
+            2 * Math.PI * ((ky + 0.35) * x - (kx - 0.2) * y) + phase2,
+          ));
+
+    norm += Math.abs(weight) * 1.65;
+  }
+
+  return norm > 0 ? value / norm : 0;
+}
+
+function vectorField(
+  x: number,
+  y: number,
+  seed: number,
+  alpha: number,
+  epsilon: number,
+) {
+  /*
+    Curl-type vector field from a scalar stream function psi:
+
+        b = (d_y psi, -d_x psi).
+
+    We finite-difference the mollified rough field. This makes the displayed
+    object a visible shadow of a rough drift rather than a classical smooth
+    vector field drawn directly.
+  */
+  const h = 1 / 260;
+
+  const psiY1 = sampleScalarNoise(x, y + h, seed, alpha, epsilon);
+  const psiY0 = sampleScalarNoise(x, y - h, seed, alpha, epsilon);
+  const psiX1 = sampleScalarNoise(x + h, y, seed, alpha, epsilon);
+  const psiX0 = sampleScalarNoise(x - h, y, seed, alpha, epsilon);
+
+  let bx = (psiY1 - psiY0) / (2 * h);
+  let by = -(psiX1 - psiX0) / (2 * h);
+
+  const mag = Math.sqrt(bx * bx + by * by);
+  const compressed = Math.tanh(0.18 * mag);
+
+  if (mag > 0) {
+    bx = (bx / mag) * compressed;
+    by = (by / mag) * compressed;
+  }
+
+  return [bx, by, compressed] as const;
+}
+
+export default function App() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const particlesRef = useRef<Particle[]>([]);
+  const fieldCacheRef = useRef<HTMLCanvasElement | null>(null);
+  const animationRef = useRef<number | null>(null);
+
+  const [seed, setSeed] = useState(31);
+  const [paused, setPaused] = useState(false);
+
+  const [params, setParams] = useState<Params>({
+    alpha: -0.25,
+    epsilon: 0.035,
+    particleCount: 1200,
+    speed: 1,
+    showParticles: true,
+    showArrows: false,
+    showField: true,
+  });
+
+  function resetParticles() {
+    const random = mulberry32(seed + 1009);
+    particlesRef.current = makeParticles(params.particleCount, random);
+  }
+
+  useEffect(() => {
+    resetParticles();
+  }, [params.particleCount, seed]);
+
+  useEffect(() => {
+    const canvasElement = canvasRef.current;
+    if (!canvasElement) return;
+
+    const canvasContext = canvasElement.getContext("2d");
+    if (!canvasContext) return;
+
+    const canvas = canvasElement;
+    const context = canvasContext;
+
+    const fieldCache = document.createElement("canvas");
+    fieldCache.width = FIELD_W;
+    fieldCache.height = FIELD_H;
+    fieldCacheRef.current = fieldCache;
+
+    const dpr = window.devicePixelRatio || 1;
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+
+      canvas.width = Math.floor(rect.width * dpr);
+      canvas.height = Math.floor(rect.height * dpr);
+
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    const rebuildFieldCache = () => {
+      const cache = fieldCacheRef.current;
+      if (!cache) return;
+
+      const cacheContext = cache.getContext("2d");
+      if (!cacheContext) return;
+
+      const image = cacheContext.createImageData(FIELD_W, FIELD_H);
+      const data = image.data;
+
+      for (let iy = 0; iy < FIELD_H; iy++) {
+        for (let ix = 0; ix < FIELD_W; ix++) {
+          const x = (ix + 0.5) / FIELD_W;
+          const y = (iy + 0.5) / FIELD_H;
+
+          const [bx, by, mag] = vectorField(
+            x,
+            y,
+            seed,
+            params.alpha,
+            params.epsilon,
+          );
+
+          const hue = wrap01(Math.atan2(by, bx) / (2 * Math.PI) + 0.5);
+          const value = clamp(0.12 + 0.92 * Math.pow(mag, 0.55), 0, 1);
+          const saturation = clamp(0.42 + 0.55 * Math.pow(mag, 0.35), 0, 1);
+
+          const [r, g, b] = hsvToRgb(hue, saturation, value);
+          const offset = 4 * (iy * FIELD_W + ix);
+
+          data[offset] = r;
+          data[offset + 1] = g;
+          data[offset + 2] = b;
+          data[offset + 3] = 255;
+        }
+      }
+
+      cacheContext.putImageData(image, 0, 0);
+    };
+
+    const drawField = () => {
+      const rect = canvas.getBoundingClientRect();
+      const cache = fieldCacheRef.current;
+      if (!cache) return;
+
+      context.imageSmoothingEnabled = false;
+      context.drawImage(cache, 0, 0, rect.width, rect.height);
+    };
+
+    const drawArrows = () => {
+      const rect = canvas.getBoundingClientRect();
+      const cols = 24;
+      const rows = 15;
+
+      context.strokeStyle = "rgba(245,245,245,0.65)";
+      context.lineWidth = 1;
+
+      for (let iy = 0; iy < rows; iy++) {
+        for (let ix = 0; ix < cols; ix++) {
+          const x = (ix + 0.5) / cols;
+          const y = (iy + 0.5) / rows;
+
+          const [bx, by, mag] = vectorField(
+            x,
+            y,
+            seed,
+            params.alpha,
+            params.epsilon,
+          );
+
+          const px = x * rect.width;
+          const py = y * rect.height;
+          const len = 22 * mag;
+
+          context.beginPath();
+          context.moveTo(px - bx * len * 0.5, py - by * len * 0.5);
+          context.lineTo(px + bx * len * 0.5, py + by * len * 0.5);
+          context.stroke();
+        }
+      }
+    };
+
+    const stepParticles = () => {
+      const dt = 0.006 * params.speed;
+      const noise = 0.055 * Math.sqrt(dt);
+      const random = Math.random;
+
+      for (const p of particlesRef.current) {
+        p.px = p.x;
+        p.py = p.y;
+
+        const [bx, by] = vectorField(
+          p.x,
+          p.y,
+          seed,
+          params.alpha,
+          params.epsilon,
+        );
+
+        p.x = wrap01(p.x + 0.55 * bx * dt + noise * randn(random));
+        p.y = wrap01(p.y + 0.55 * by * dt + noise * randn(random));
+
+        p.life -= dt * 0.035;
+
+        if (p.life <= 0) {
+          p.x = random();
+          p.y = random();
+          p.px = p.x;
+          p.py = p.y;
+          p.life = 0.7 + 0.6 * random();
+        }
+      }
+    };
+
+    const drawParticles = () => {
+      const rect = canvas.getBoundingClientRect();
+
+      context.fillStyle = "rgba(245,245,235,0.76)";
+
+      for (const p of particlesRef.current) {
+        const px = Math.round(p.x * rect.width);
+        const py = Math.round(p.y * rect.height);
+
+        context.fillRect(px, py, 2, 2);
+      }
+    };
+
+    const drawOverlayText = () => {
+      const rect = canvas.getBoundingClientRect();
+
+      context.fillStyle = "rgba(0,0,0,0.42)";
+      context.fillRect(16, rect.height - 48, 560, 30);
+
+      context.fillStyle = "rgba(245,245,245,0.88)";
+      context.font =
+        "12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+
+      context.fillText(
+        `b^ε = P_ε b      α=${params.alpha.toFixed(
+          2,
+        )}      ε=${params.epsilon.toFixed(3)}      seed=${seed}`,
+        28,
+        rect.height - 28,
+      );
+    };
+
+    const frame = () => {
+      const rect = canvas.getBoundingClientRect();
+
+      context.imageSmoothingEnabled = false;
+      context.clearRect(0, 0, rect.width, rect.height);
+
+      context.fillStyle = "#070707";
+      context.fillRect(0, 0, rect.width, rect.height);
+
+      if (params.showField) {
+        drawField();
+      }
+
+      if (!paused && params.showParticles) {
+        stepParticles();
+      }
+
+      if (params.showParticles) {
+        drawParticles();
+      }
+
+      if (params.showArrows) {
+        drawArrows();
+      }
+
+      drawOverlayText();
+
+      animationRef.current = requestAnimationFrame(frame);
+    };
+
+    resize();
+    rebuildFieldCache();
+    window.addEventListener("resize", resize);
+
+    animationRef.current = requestAnimationFrame(frame);
+
+    return () => {
+      window.removeEventListener("resize", resize);
+
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [params, seed, paused]);
+
+  return (
+    <main className="page">
+      <section className="stageWrap">
+        <canvas ref={canvasRef} className="stage" />
+      </section>
+
+      <section className="hero">
+        <div className="copy">
+          <p className="eyebrow">rough drift / mollification / visible shadow</p>
+          <h1>Besov Glitch Field</h1>
+          <p className="subtitle">
+            A distributional drift cannot be drawn directly. This sketch shows
+            its mollified shadow: α controls roughness, ε controls the scale at
+            which the field becomes visible.
+          </p>
+        </div>
+
+        <div className="panel">
+          <label>
+            <span>
+              α <small>regularity</small>
+            </span>
+            <input
+              type="range"
+              min="-1.2"
+              max="1.2"
+              step="0.01"
+              value={params.alpha}
+              onChange={(event) =>
+                setParams((p) => ({
+                  ...p,
+                  alpha: Number(event.target.value),
+                }))
+              }
+            />
+            <output>{params.alpha.toFixed(2)}</output>
+          </label>
+
+          <label>
+            <span>
+              ε <small>mollification</small>
+            </span>
+            <input
+              type="range"
+              min="0.005"
+              max="0.16"
+              step="0.001"
+              value={params.epsilon}
+              onChange={(event) =>
+                setParams((p) => ({
+                  ...p,
+                  epsilon: Number(event.target.value),
+                }))
+              }
+            />
+            <output>{params.epsilon.toFixed(3)}</output>
+          </label>
+
+          <label>
+            <span>
+              N <small>tracers</small>
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="3500"
+              step="100"
+              value={params.particleCount}
+              onChange={(event) =>
+                setParams((p) => ({
+                  ...p,
+                  particleCount: Number(event.target.value),
+                }))
+              }
+            />
+            <output>{params.particleCount}</output>
+          </label>
+
+          <label>
+            <span>
+              v <small>speed</small>
+            </span>
+            <input
+              type="range"
+              min="0.1"
+              max="4"
+              step="0.05"
+              value={params.speed}
+              onChange={(event) =>
+                setParams((p) => ({
+                  ...p,
+                  speed: Number(event.target.value),
+                }))
+              }
+            />
+            <output>{params.speed.toFixed(2)}</output>
+          </label>
+
+          <div className="toggles">
+            <button
+              className={params.showField ? "active" : ""}
+              onClick={() =>
+                setParams((p) => ({ ...p, showField: !p.showField }))
+              }
+            >
+              field
+            </button>
+            <button
+              className={params.showParticles ? "active" : ""}
+              onClick={() =>
+                setParams((p) => ({
+                  ...p,
+                  showParticles: !p.showParticles,
+                }))
+              }
+            >
+              tracers
+            </button>
+            <button
+              className={params.showArrows ? "active" : ""}
+              onClick={() =>
+                setParams((p) => ({ ...p, showArrows: !p.showArrows }))
+              }
+            >
+              arrows
+            </button>
+          </div>
+
+          <div className="buttons">
+            <button onClick={() => setPaused((value) => !value)}>
+              {paused ? "resume" : "pause"}
+            </button>
+            <button onClick={() => setSeed((s) => s + 1)}>new seed</button>
+            <button onClick={resetParticles}>reset tracers</button>
+          </div>
+
+          <div className="legend">
+            <p className="legendTitle">how to read it</p>
+            <dl>
+              <div>
+                <dt>hue</dt>
+                <dd>direction of the drift vector</dd>
+              </div>
+              <div>
+                <dt>brightness</dt>
+                <dd>magnitude of the mollified field</dd>
+              </div>
+              <div>
+                <dt>α large</dt>
+                <dd>coherent colors, smoother drift</dd>
+              </div>
+              <div>
+                <dt>α negative</dt>
+                <dd>high-frequency, distributional glitch</dd>
+              </div>
+              <div>
+                <dt>ε large</dt>
+                <dd>stronger smoothing, clearer shadow</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
